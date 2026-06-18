@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.db.engine import init_db
-from app.api import contracts
+from app.api import contracts, baseline
 
 
 def create_app() -> FastAPI:
@@ -14,6 +14,7 @@ def create_app() -> FastAPI:
         init_db()
 
     app.include_router(contracts.router)
+    app.include_router(baseline.router)
     return app
 
 

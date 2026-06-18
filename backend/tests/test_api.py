@@ -33,3 +33,15 @@ def test_upload_analyze_get_flow(tmp_path, monkeypatch):
     body = r.json()
     assert body["status"] == "done"
     assert body["analysis"]["overall_risk_score"] == 42
+
+
+def test_get_and_put_baseline(tmp_path):
+    from app.main import create_app
+    from fastapi.testclient import TestClient
+    client = TestClient(create_app())
+    r = client.get("/baseline")
+    assert r.status_code == 200 and "indemnity" in r.json()
+    new = dict(r.json()); new["indemnity"] = "updated baseline text"
+    r = client.put("/baseline", json=new)
+    assert r.status_code == 200
+    assert client.get("/baseline").json()["indemnity"] == "updated baseline text"
