@@ -66,3 +66,31 @@ def test_docling_parser_uses_converter(tmp_path):
     out = DoclingParser(converter=_FakeConverter()).parse(str(p))
     assert "Indemnity" in out.full_text
     assert out.had_text_layer is True
+
+
+from app.ingestion.router import parse_document
+
+
+class _StubParser:
+    def __init__(self, doc): self.doc = doc
+    def parse(self, path): return self.doc
+
+
+def test_router_falls_back_when_degraded():
+    degraded = ParsedDocument(blocks=[""], page_count=2, had_text_layer=False, source="s.pdf")
+    good = ParsedDocument(blocks=["Real contract text here, plenty of it."],
+                          page_count=2, had_text_layer=True, source="s.pdf")
+    out = parse_document("s.pdf", pdf_parser=_StubParser(degraded),
+                         docx_parser=_StubParser(degraded),
+                         docling_parser=_StubParser(good))
+    assert out.full_text.startswith("Real contract")
+
+
+def test_router_keeps_primary_when_good():
+    good = ParsedDocument(blocks=["Plenty of real contract text present here."],
+                          page_count=1, had_text_layer=True, source="s.docx")
+    sentinel = ParsedDocument(blocks=["FALLBACK"], page_count=1, had_text_layer=True, source="s")
+    out = parse_document("s.docx", pdf_parser=_StubParser(good),
+                         docx_parser=_StubParser(good),
+                         docling_parser=_StubParser(sentinel))
+    assert "FALLBACK" not in out.full_text
