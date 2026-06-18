@@ -18,11 +18,13 @@ router = APIRouter(prefix="/contracts", tags=["contracts"])
 @router.post("")
 def upload(file: UploadFile = File(...), session: Session = Depends(get_session)):
     os.makedirs(settings.upload_dir, exist_ok=True)
-    dest = os.path.join(settings.upload_dir, file.filename)
+    # Sanitize the client-supplied name to a bare basename to avoid path traversal.
+    safe_name = os.path.basename(file.filename or "upload")
+    dest = os.path.join(settings.upload_dir, safe_name)
     with open(dest, "wb") as f:
         f.write(file.file.read())
-    fmt = os.path.splitext(file.filename)[1].lstrip(".").lower()
-    c = Contract(filename=file.filename, file_path=dest, format=fmt, status="uploaded")
+    fmt = os.path.splitext(safe_name)[1].lstrip(".").lower()
+    c = Contract(filename=safe_name, file_path=dest, format=fmt, status="uploaded")
     session.add(c); session.commit(); session.refresh(c)
     return {"id": c.id, "filename": c.filename, "status": c.status}
 
