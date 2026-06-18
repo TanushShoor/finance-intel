@@ -26,3 +26,18 @@ def test_docx_parser_extracts_paragraphs(tmp_path):
     out = DocxParser().parse(str(p))
     assert "Indemnity" in out.full_text
     assert out.had_text_layer is True
+
+
+from reportlab.pdfgen import canvas
+from app.ingestion.pdf import PdfParser
+
+
+def test_pdf_parser_extracts_text(tmp_path):
+    p = tmp_path / "t.pdf"
+    c = canvas.Canvas(str(p))
+    c.drawString(72, 720, "1. Governing Law")
+    c.drawString(72, 700, "This Agreement is governed by the laws of England.")
+    c.save()
+    out = PdfParser().parse(str(p))
+    assert "Governing Law" in out.full_text
+    assert out.had_text_layer is True
