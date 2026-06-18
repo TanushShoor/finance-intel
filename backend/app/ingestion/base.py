@@ -14,7 +14,7 @@ class ParsedDocument(BaseModel):
 
     def is_degraded(self) -> bool:
         """True when extraction yielded essentially no usable text."""
-        return not self.had_text_layer or len(self.full_text.strip()) < 10
+        return not self.had_text_layer or len(self.full_text.strip()) < 30
 
 
 class DocumentParser(Protocol):

@@ -2,9 +2,12 @@ from app.ingestion.base import ParsedDocument
 
 
 def test_parsed_document_full_text_joins_blocks():
-    doc = ParsedDocument(blocks=["Para one.", "Para two."], page_count=1,
-                         had_text_layer=True, source="x.pdf")
-    assert doc.full_text == "Para one.\nPara two."
+    doc = ParsedDocument(
+        blocks=["This is the first paragraph of the contract.",
+                "This is the second paragraph of the contract."],
+        page_count=1, had_text_layer=True, source="x.pdf")
+    assert doc.full_text == ("This is the first paragraph of the contract.\n"
+                             "This is the second paragraph of the contract.")
     assert doc.is_degraded() is False
 
 
