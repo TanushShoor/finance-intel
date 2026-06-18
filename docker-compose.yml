@@ -1,0 +1,33 @@
+# Single-host deployment. Backend keeps state on a named volume (SQLite + uploads).
+#
+#   GEMINI_API_KEY=sk-... VITE_API_BASE=http://<host>:8000 docker compose up -d --build
+#
+# VITE_API_BASE must be the address the *browser* uses to reach the backend
+# (e.g. http://localhost:8000 locally, or https://api.your-domain.com in prod).
+services:
+  backend:
+    build: ./backend
+    environment:
+      GEMINI_API_KEY: ${GEMINI_API_KEY:?set GEMINI_API_KEY}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
+      DB_PATH: /data/contracts.db
+      UPLOAD_DIR: /data/uploads
+    volumes:
+      - ledger-data:/data
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_BASE: ${VITE_API_BASE:-http://localhost:8000}
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  ledger-data:

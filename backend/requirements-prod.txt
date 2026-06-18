@@ -1,0 +1,14 @@
+# Runtime-only dependencies for deployment (excludes test + fixture tooling).
+fastapi==0.115.*
+uvicorn[standard]==0.32.*
+google-genai==1.*
+pydantic==2.*
+pydantic-settings==2.*
+sqlmodel==0.0.22
+python-multipart==0.0.*
+pdfplumber==0.11.*
+python-docx==1.1.*
+
+# Optional: scanned-PDF OCR fallback. Large (pulls torch et al.) — uncomment
+# only if you need OCR for image-only PDFs.
+# docling==2.*

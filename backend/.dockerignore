@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+tests/
+eval/
+fixtures/
+*.db
+uploads/
+.env
+.env.example

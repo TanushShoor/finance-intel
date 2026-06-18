@@ -1,4 +1,5 @@
-const BASE = "http://localhost:8000";
+// Configurable at build time via VITE_API_BASE; falls back to local dev.
+const BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:8000";
 
 export async function uploadDocument(file: File) {
   const fd = new FormData();

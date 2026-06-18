@@ -161,6 +161,17 @@ cd backend && ../legalvenv/bin/pytest        # unit tests; Gemini is mocked, no 
 
 > Note: `eval/` and `fixtures/` are leftovers from the contract-analysis prototype this project was built on and are not wired to the current pipeline.
 
+## Deployment
+
+Ledger is a stateful, single-instance app (in-process progress + background tasks, SQLite, local uploads), so it deploys as **one backend process with a persistent disk** plus a static frontend. Docker artifacts (`backend/Dockerfile`, `frontend/Dockerfile`, `docker-compose.yml`) and a slim `backend/requirements-prod.txt` are included. Full instructions — single-host Docker, managed split (Vercel + Render/Fly), TLS, and the scaling constraints — are in **[DEPLOYMENT.md](DEPLOYMENT.md)**.
+
+```bash
+GEMINI_API_KEY=your-key VITE_API_BASE=http://localhost:8000 docker compose up -d --build
+# frontend → http://localhost:8080   backend → http://localhost:8000
+```
+
+---
+
 ## Document parsing & the Docling fallback
 
 - **PDF** — pdfplumber extracts text page by page.
