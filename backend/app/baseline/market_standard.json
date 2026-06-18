@@ -1,0 +1,9 @@
+{
+  "indemnity": "Mutual indemnity limited to third-party claims arising from each party's own breach, subject to the liability cap.",
+  "limitation_of_liability": "Mutual cap at 12 months' fees; exclusion of indirect/consequential loss; carve-outs for confidentiality and IP.",
+  "governing_law": "A neutral, well-established jurisdiction (e.g. England and Wales or Delaware) chosen at signing, not at dispute time.",
+  "termination": "Termination for convenience on 30+ days' notice and for uncured material breach; no long auto-renewal lock-in.",
+  "ip_ownership": "Each party retains pre-existing IP; deliverables assigned to the customer on payment.",
+  "payment_terms": "Net 30 on undisputed invoices; reasonable late interest; no unilateral price increases.",
+  "confidentiality": "Mutual confidentiality with defined purpose and a 3-5 year survival period."
+}
