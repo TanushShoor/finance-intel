@@ -61,6 +61,7 @@ Frontend on a static host, backend on a container PaaS with a disk.
 - (Static SPA — these platforms are ideal here.)
 
 ### Backend → Render / Railway / Fly.io
+- **Pin Python to 3.13.** On Python 3.14, SQLModel 0.0.22 fails at import with `Field 'id' requires a type annotation` (3.14 changed how class annotations are evaluated). A `.python-version` file (`3.13.7`) is committed at the repo root and in `backend/`; if your platform ignores it, set `PYTHON_VERSION=3.13.7` as an env var. (Not an issue with the Docker path — its base image is `python:3.13-slim`.)
 - Deploy `backend/` via its `Dockerfile`.
 - **Attach a persistent disk** mounted at `/data` (constraint #2). Note: some free tiers have no persistent disk and/or spin the instance down when idle (which kills in-flight analyses) — use a tier with a disk and always-on instance for reliable demos.
 - Set env: `GEMINI_API_KEY`, optionally `GEMINI_MODEL`; the Dockerfile already points `DB_PATH`/`UPLOAD_DIR` at `/data`.
