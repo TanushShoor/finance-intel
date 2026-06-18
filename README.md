@@ -1,23 +1,116 @@
-# Contract Analysis Platform
+# Ledger — AI Financial Document Analyst
 
-A portfolio proof-of-concept that automates contract review. Upload a PDF or DOCX contract and the platform extracts seven named clause types, compares each clause against a configurable market-standard baseline, scores risk per clause and overall, generates a plain-English executive summary, and lets you compare a specific clause across multiple contracts side-by-side.
+Read a filing the way an analyst would, in seconds. Upload a 10-K / 10-Q, an earnings release, or a call transcript and Ledger ingests and structures it, extracts the financial metrics with period-over-period comparison, reads management's tone, pulls and categorises risk factors, benchmarks companies against each other, and drafts an investment memo — leaving you the judgment.
 
-Backend: FastAPI + Google Gemini (`google-genai`, structured output) + SQLite. Frontend: React / Vite / TypeScript / Tailwind CSS. Document parsing: pdfplumber (PDF) and python-docx (DOCX) with a Docling fallback for scanned PDFs.
+**Stack.** Backend: FastAPI + Google Gemini (`google-genai`, structured output) + SQLite (SQLModel). Frontend: React / Vite / TypeScript / Tailwind. Parsing: pdfplumber (PDF) and python-docx (DOCX), with a Docling fallback for scanned PDFs.
+
+**Capabilities** (each maps to a graded success metric):
+
+| Capability | What it does |
+|---|---|
+| Metric extraction | Extracts named figures (revenue, margins, EPS, cash flow, debt, guidance…) into a table with YoY/QoQ change |
+| Management tone | Scores sentiment, confidence, and hedging; surfaces the most confident and most cautious passages |
+| Risk factors | Extracts and categorises disclosed risks; diffs two periods to flag **new** / **escalated** risks |
+| Competitor benchmarking | Side-by-side metric grid across companies, with comparative commentary |
+| Investment memo | Company overview, financial summary, bull case, bear case, key risks, questions — grounded in the extracted data |
 
 ---
 
 ## Architecture
 
-The pipeline runs in six stages:
+Document parsing feeds a single best-effort analysis pipeline; the result is stored as one JSON blob and rendered by the frontend. Cross-document features read those stored results.
 
-1. **Ingest** — parse PDF or DOCX into text blocks.
-2. **Extract** — Gemini structured-output call: for each of the 7 clause types, decide `present/absent` and return the verbatim text.
-3. **Compare** — Gemini call: compare each extracted clause against the market-standard baseline position and classify as `standard`, `favourable`, `unfavourable`, or `unusual`, with a plain-English rationale.
-4. **Risk score** — deterministic aggregation: per-clause score (0–100) derived from the deviation classification; overall score and category breakdown computed arithmetically from clause scores.
-5. **Summarise** — Gemini call: produce a structured executive summary (`coverage`, `who_carries_risk`, `key_commercial_terms`, `top_issues`).
-6. **Batch compare** — Gemini call across ≥ 2 stored contract analyses: extract the text of one clause type from each contract and return a comparison table plus a list of plain-English differences.
+```
+            ┌──────────────── ingestion ────────────────┐
+ PDF / DOCX ─► pdfplumber / python-docx ─► Docling fallback ─► full text
+                (scanned PDF, <30 chars of text layer)              │
+                                                                    ▼
+   ┌──────────── run_financial_analysis  (FastAPI background task) ────────────┐
+   │  1. structure   chunk → map: blocks per chunk → merge → synthesize outline │ ← streams per-chunk progress
+   │  2. identity    company · period · doc-type                                 │
+   │  3. metrics     chunked extract → dedupe by (canonical name, period)        │  ▶ metric extraction
+   │  4. tone        overall sentiment + confidence + telling passages           │  ▶ tone analysis
+   │  5. risk        chunked extract → dedupe risk factors                        │  ▶ risk extraction
+   │  6. memo        synthesise from (metrics + tone + risks)                     │  ▶ investment memo
+   └────────────────────────────────────────────────────────────────────────────┘
+                                      │
+                  FinancialAnalysis JSON ─► SQLite (Contract.analysis)
+                                      │
+   Cross-document:  POST /benchmark      companies × metrics grid + commentary
+                    POST /compare/risk   period-over-period risk-factor diff
+```
 
-Each LLM stage sends a Pydantic schema as the response schema so Gemini returns validated JSON directly.
+**Key design points**
+
+- **Chunked map-reduce structuring.** A large filing cannot be structured in one LLM call (the JSON response truncates). `ingestion/structure.py` splits the text (`ingestion/chunking.py`), parses each chunk into ordered blocks (the map), merges and de-duplicates overlap in code, then makes **one bounded call over the headings** to synthesize a clean title + outline (the reduce). This is the stage that streams the live chunk-progress animation.
+- **Schema sanitizer.** Gemini's `response_schema` rejects JSON-Schema that Pydantic normally emits (`default` keys, `$ref`/`$defs` indirection, recursive schemas, `anyOf` null unions). `llm/schema.py:to_gemini_schema` rewrites any Pydantic model into a Gemini-safe schema; `llm/client.py` then parses the response back into the typed model. Every structured call goes through it.
+- **Best-effort stages.** Each pipeline stage is wrapped so one failure (a bad chunk, a flaky call) degrades gracefully instead of sinking the whole analysis.
+- **Ephemeral progress.** `pipeline/progress.py` is a thread-safe in-process store updated by the running background task and read by `GET /contracts/{id}`; it drives the frontend animation. (In-process by design — single-worker dev setup.)
+- **Resilient startup.** On boot, any row left `processing`/`uploaded` by a restart is marked `failed`, so a reload never leaves a stuck "zombie" analysis.
+
+### Backend modules
+
+```
+backend/app/
+├── ingestion/    pdf.py · docx.py · docling_parser.py · router.py · chunking.py · structure.py
+├── pipeline/     identity.py · metrics.py · tone.py · risk_factors.py · memo.py
+│                 benchmark.py · runner.py · progress.py
+├── llm/          client.py · schema.py (sanitizer) · prompts.py
+├── schemas/      models.py (document structure) · financial.py (analysis models)
+├── api/          contracts.py (upload/analyze/get/list/delete) · compare.py (benchmark, risk diff)
+├── db/           engine.py · models.py (Contract)
+├── config.py     settings (env)
+└── main.py       app factory, CORS, startup recovery
+```
+
+### Frontend
+
+```
+frontend/src/
+├── pages/        Library (filings) · Analysis (dashboard) · Document · Memo · Benchmark
+├── components/   Shell · ChunkProgress · MetricsTable · ToneGauge
+├── lib/          finance.ts (labels, colours, stage map)
+└── api/client.ts
+```
+
+### HTTP API
+
+| Method | Path | Purpose |
+|---|---|---|
+| `POST` | `/contracts` | Upload a filing (multipart) → returns id |
+| `POST` | `/contracts/{id}/analyze` | Kick off analysis (background task) |
+| `GET`  | `/contracts/{id}` | Status + live `progress` + `analysis` JSON |
+| `GET`  | `/contracts` | List filings (id, company, period, doc_type, status) |
+| `DELETE` | `/contracts/{id}` | Remove a filing |
+| `POST` | `/benchmark` | `{contract_ids[]}` → metric grid + highlights |
+| `POST` | `/compare/risk` | `{prior_id, current_id}` → risk-factor deltas |
+
+---
+
+## Workflow
+
+End-to-end flow for analysing a single filing and then comparing across filings:
+
+```
+Browser (React)                    FastAPI                         Gemini · SQLite
+──────────────                     ───────                         ───────────────
+ choose file ──── POST /contracts ──────► save file + row(uploaded) ──────► SQLite
+ (auto)     ──── POST /contracts/{id}/analyze ─► spawn background task: run_financial_analysis
+ navigate to /contracts/{id}
+ poll 2s   ──── GET /contracts/{id} ────► { status, progress, analysis }   ◄── progress store
+    │  status = processing → <ChunkProgress> shows the current stage and,
+    │                         during structuring, each parsed chunk rising in
+    │  status = done       → render from analysis JSON:
+    │                         · Dashboard  → metrics table + tone gauge + risk factors
+    │                         · Memo       → overview / bull / bear / risks / questions
+    │                         · Document   → synthesized outline + typeset body
+ Benchmark page
+   pick ≥2 filings ─ POST /benchmark ─────► grid assembled from each filing's stored metrics
+                                            + one LLM call for comparative commentary
+   pick prior+current ─ POST /compare/risk ► LLM diffs the two stored risk-factor sets
+```
+
+The analysis stages run **sequentially inside the background task**, so a large 10-K takes a few minutes (each chunk is a real Gemini call); short earnings releases finish quickly. The UI keeps polling and updates live.
 
 ---
 
@@ -25,157 +118,51 @@ Each LLM stage sends a Pydantic schema as the response schema so Gemini returns 
 
 - **Python 3.13** — a virtualenv `legalvenv/` is already created at the repo root.
 - **Node 20** — for the React frontend.
-- **Google Gemini API key** — free tier is sufficient for development.
-
----
+- **Google Gemini API key** — the free tier is sufficient for development.
 
 ## Setup
 
-### 1. Backend dependencies
-
 ```bash
+# 1. Backend dependencies
 legalvenv/bin/pip install -r backend/requirements.txt
-```
 
-### 2. Configure the API key
-
-```bash
+# 2. Configure the API key
 cp backend/.env.example backend/.env
-# Then open backend/.env and set:
-# GEMINI_API_KEY=your-key-here
-```
+#    then set GEMINI_API_KEY in backend/.env  (GEMINI_MODEL defaults to gemini-2.5-flash)
 
-`GEMINI_MODEL` defaults to `gemini-2.5-flash` if not set.
-
-### 3. Generate synthetic fixtures (needed for the eval harness)
-
-```bash
-cd backend && ../legalvenv/bin/python fixtures/generate.py
-```
-
-### 4. Frontend dependencies
-
-```bash
+# 3. Frontend dependencies
 cd frontend && npm install
 ```
 
----
-
 ## Running
 
-### Backend
-
 ```bash
-cd backend
-../legalvenv/bin/uvicorn app.main:app --reload
+# Backend  → http://localhost:8000  (docs at /docs)
+cd backend && ../legalvenv/bin/uvicorn app.main:app --reload
+
+# Frontend → http://localhost:5173
+cd frontend && npm run dev
 ```
 
-Serves at **http://localhost:8000**. Interactive API docs at **http://localhost:8000/docs**.
-
-### Frontend
-
-```bash
-cd frontend
-npm run dev
-```
-
-Serves at **http://localhost:5173**. The frontend expects the backend at `localhost:8000`; CORS is pre-configured.
-
----
+CORS is open, so the frontend works on whatever port Vite picks.
 
 ## Usage
 
-1. Open **http://localhost:5173** and go to the **Library** page.
-2. Upload a PDF or DOCX contract. Analysis starts automatically in the background.
-3. Once complete, open the contract to see:
-   - **Risk gauge** — overall risk score (0–100).
-   - **Category breakdown** — per-clause scores.
-   - **Clause cards** — each clause with its extracted text and deviation badge (`standard` / `favourable` / `unfavourable` / `unusual`).
-4. Navigate to the **Summary** tab to read the plain-English executive summary.
-5. Use **Batch Compare**: select ≥ 2 analyzed contracts and a clause type to see a side-by-side comparison table and a list of key differences.
-
----
+1. Open the frontend and go to **Filings**.
+2. **Analyse a filing** — upload a PDF/DOCX. You're taken straight to the dashboard, which shows the live multi-stage progress (and the chunk animation during structuring).
+3. When it completes: the **Dashboard** (metrics table, tone gauge, risk factors), plus the **Investment memo →** and **Document →** views.
+4. **Benchmark** tab — select ≥ 2 analysed filings for the metric comparison grid, or pick a prior + current filing to diff their risk factors.
 
 ## Testing
 
-### Unit tests (no API key required — Gemini is mocked)
-
 ```bash
-cd backend && ../legalvenv/bin/pytest
+cd backend && ../legalvenv/bin/pytest        # unit tests; Gemini is mocked, no API key needed
 ```
 
-### Eval harness (real Gemini — requires `GEMINI_API_KEY` in `backend/.env`)
+> Note: `eval/` and `fixtures/` are leftovers from the contract-analysis prototype this project was built on and are not wired to the current pipeline.
 
-Runs the full pipeline against synthetic fixtures and scores all 5 success metrics:
+## Document parsing & the Docling fallback
 
-```bash
-cd backend && ../legalvenv/bin/python eval/run_eval.py
-```
-
-Exit code 0 = all metric groups passed; 1 = one or more failed.
-
----
-
-## Configuring the market-standard baseline
-
-The baseline defines the "fair / market-standard" position for each of the 7 clause types. Deviations from it drive the risk scoring.
-
-**Edit directly:**
-
-```bash
-# backend/app/baseline/market_standard.json
-# One key per clause type, value is the standard-position description string.
-```
-
-**Via the API:**
-
-```
-GET  /baseline        # returns all positions
-PUT  /baseline        # body: { "clause_type": "...", "standard_position": "..." }
-```
-
----
-
-## Document parsing and the Docling fallback
-
-- **PDF** — pdfplumber extracts text page-by-page.
+- **PDF** — pdfplumber extracts text page by page.
 - **DOCX** — python-docx extracts paragraph text.
-- **Scanned PDF fallback** — if pdfplumber yields fewer than 30 characters (no text layer), the ingestion router automatically retries with Docling (`docling.document_converter.DocumentConverter`), which handles OCR and complex layouts. Docling is an optional heavy dependency; a helpful error is raised if it is not installed.
-
----
-
-## Project layout
-
-```
-legal_docs_project/
-├── legalvenv/                  # Python 3.13 virtualenv
-├── backend/
-│   ├── app/
-│   │   ├── ingestion/          # pdf.py, docx.py, docling_parser.py, router.py, structure.py
-│   │   ├── pipeline/           # extraction.py, comparison.py, risk.py, summary.py, runner.py, batch.py
-│   │   ├── baseline/           # loader.py, market_standard.json
-│   │   ├── db/                 # engine.py, models.py
-│   │   ├── api/                # contracts.py, baseline.py, compare.py
-│   │   ├── llm/                # client.py, prompts.py
-│   │   ├── schemas/            # models.py
-│   │   ├── clause_types.py
-│   │   ├── config.py
-│   │   └── main.py
-│   ├── fixtures/
-│   │   ├── generate.py
-│   │   ├── generated/          # all_clauses.docx, planted_risk.pdf, batch/
-│   │   └── answer_keys/        # all_clauses.json, planted_risk.json, batch.json
-│   ├── eval/
-│   │   └── run_eval.py         # 5-metric eval harness
-│   ├── tests/                  # unit tests (mocked Gemini)
-│   └── requirements.txt
-├── frontend/
-│   └── src/
-│       ├── api/                # API client
-│       ├── components/         # RiskGauge, ClauseCard, DeviationBadge
-│       └── pages/              # Library, Analysis, Summary, BatchCompare
-└── docs/
-    └── superpowers/
-        ├── specs/
-        └── plans/
-```
+- **Scanned-PDF fallback** — if the text layer yields fewer than ~30 characters, the ingestion router retries with Docling (OCR + complex layouts). Docling is an optional heavy dependency; a clear error is raised if it isn't installed.
