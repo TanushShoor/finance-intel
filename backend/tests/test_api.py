@@ -35,9 +35,23 @@ def test_upload_analyze_get_flow(tmp_path, monkeypatch):
     assert body["analysis"]["overall_risk_score"] == 42
 
 
-def test_get_and_put_baseline(tmp_path):
+def test_get_and_put_baseline(tmp_path, monkeypatch):
+    # Isolate from the real, git-tracked market_standard.json: redirect the
+    # router's load/save to a temp copy so the suite never mutates the file.
+    import json
+    import shutil
+    import app.api.baseline as baseline_mod
+    from app.baseline.loader import _DEFAULT
     from app.main import create_app
     from fastapi.testclient import TestClient
+
+    tmp = tmp_path / "baseline.json"
+    shutil.copy(_DEFAULT, tmp)
+    monkeypatch.setattr(baseline_mod, "load_baseline",
+                        lambda: json.loads(tmp.read_text()))
+    monkeypatch.setattr(baseline_mod, "save_baseline",
+                        lambda data: tmp.write_text(json.dumps(data, indent=2)))
+
     client = TestClient(create_app())
     r = client.get("/baseline")
     assert r.status_code == 200 and "indemnity" in r.json()
