@@ -1,0 +1,11 @@
+{
+  "expected_present": [
+    "indemnity",
+    "limitation_of_liability",
+    "governing_law",
+    "termination",
+    "ip_ownership",
+    "payment_terms",
+    "confidentiality"
+  ]
+}

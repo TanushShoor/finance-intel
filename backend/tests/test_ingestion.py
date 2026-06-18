@@ -1,3 +1,4 @@
+import os
 from app.ingestion.base import ParsedDocument
 
 
@@ -97,3 +98,16 @@ def test_router_keeps_primary_when_good():
                          docx_parser=_StubParser(good),
                          docling_parser=_StubParser(sentinel))
     assert "FALLBACK" not in out.full_text
+
+
+FIX = os.path.join(os.path.dirname(__file__), "..", "fixtures", "generated")
+
+
+def test_fixture_all_clauses_parses():
+    out = parse_document(os.path.join(FIX, "all_clauses.docx"))
+    assert "Indemnity" in out.full_text and "Confidentiality" in out.full_text
+
+
+def test_fixture_planted_risk_pdf_parses():
+    out = parse_document(os.path.join(FIX, "planted_risk.pdf"))
+    assert "indemnify" in out.full_text.lower()

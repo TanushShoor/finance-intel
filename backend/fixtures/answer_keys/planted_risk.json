@@ -1,0 +1,20 @@
+{
+  "expected_flagged": [
+    "indemnity",
+    "limitation_of_liability",
+    "termination",
+    "ip_ownership",
+    "payment_terms",
+    "governing_law",
+    "confidentiality"
+  ],
+  "reasons": {
+    "indemnity": "One-sided, uncapped indemnity covering the other party's own negligence.",
+    "limitation_of_liability": "Supplier liability fully excluded; customer waives all remedies.",
+    "termination": "Unilateral no-notice termination plus long auto-renewal lock-in.",
+    "ip_ownership": "Customer's pre-existing IP assigned away to the Supplier.",
+    "payment_terms": "Immediate non-refundable payment with unilateral price increases.",
+    "governing_law": "Governing law unilaterally chosen by one party at dispute time.",
+    "confidentiality": "Confidentiality obligation effectively removed for one party."
+  }
+}
