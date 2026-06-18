@@ -1,74 +1,37 @@
 from typing import Literal, Optional
 from pydantic import BaseModel, Field
-from app.clause_types import ClauseType
-
-RiskCategory = Literal["financial", "operational", "legal", "reputational"]
-Classification = Literal["favourable", "unfavourable", "unusual", "standard"]
 
 
 # --- Ingestion / structure ---
-class ClauseNode(BaseModel):
-    number: Optional[str] = Field(None, description="e.g. '8.1' or '(a)'")
-    heading: Optional[str] = None
+BlockType = Literal["header", "subheader", "paragraph"]
+
+
+class DocumentBlock(BaseModel):
+    """One unit of the document body, in reading order."""
+    type: BlockType
+    number: Optional[str] = Field(None, description="e.g. '8.1' if the source has it")
     text: str = ""
-    cross_references: list[str] = Field(default_factory=list)
-    children: list["ClauseNode"] = Field(default_factory=list)
+
+
+class OutlineEntry(BaseModel):
+    """One entry in the synthesized table of contents."""
+    number: Optional[str] = None
+    title: str
+    level: int = Field(1, ge=1, le=2, description="1 = header, 2 = subheader")
+
+
+class ChunkBlocks(BaseModel):
+    """Map-step output: the blocks parsed from a single chunk."""
+    blocks: list[DocumentBlock] = Field(default_factory=list)
+
+
+class DocumentOutline(BaseModel):
+    """Synthesis-step output: the cleaned title + table of contents."""
+    title: Optional[str] = None
+    outline: list[OutlineEntry] = Field(default_factory=list)
 
 
 class StructuredDocument(BaseModel):
     title: Optional[str] = None
-    nodes: list[ClauseNode] = Field(default_factory=list)
-
-
-# --- Extraction ---
-class ExtractedClause(BaseModel):
-    type: ClauseType
-    present: bool
-    text: str = ""
-    location: Optional[str] = None
-    confidence: float = 0.0
-
-
-class ClauseExtractionResult(BaseModel):
-    clauses: list[ExtractedClause]
-
-
-# --- Comparison ---
-class DeviationResult(BaseModel):
-    classification: Classification
-    rationale: str
-    baseline_ref: str
-
-
-# --- Risk ---
-class RiskComponent(BaseModel):
-    category: RiskCategory
-    severity: int = Field(ge=0, le=100)
-    rationale: str
-
-
-# --- Summary ---
-class ExecutiveSummary(BaseModel):
-    coverage: str
-    who_carries_risk: str
-    key_commercial_terms: list[str]
-    top_issues: list[str] = Field(description="Top 3 issues to negotiate")
-
-
-# --- Batch ---
-class BatchCell(BaseModel):
-    contract_id: int
-    contract_name: str
-    present: bool
-    text: str = ""
-    classification: Optional[Classification] = None
-    risk_score: Optional[int] = None
-
-
-class BatchComparison(BaseModel):
-    clause_type: ClauseType
-    cells: list[BatchCell]
-    differences: list[str]
-
-
-ClauseNode.model_rebuild()
+    outline: list[OutlineEntry] = Field(default_factory=list)
+    blocks: list[DocumentBlock] = Field(default_factory=list)

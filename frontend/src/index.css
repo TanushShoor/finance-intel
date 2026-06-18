@@ -1,3 +1,94 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  :root {
+    --ground: #e9edf1;
+    --ink: #12171e;
+    --line: #d2d9e0;
+    --cobalt: #2348c8;
+  }
+
+  html {
+    color-scheme: light;
+  }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    /* Faint metrology grid: the spec-sheet ground the whole product sits on. */
+    background-image:
+      linear-gradient(to right, rgba(18, 23, 30, 0.035) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(18, 23, 30, 0.035) 1px, transparent 1px);
+    background-size: 28px 28px;
+    color: var(--ink);
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    font-feature-settings: "tnum" 1;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--cobalt);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+}
+
+@layer components {
+  /* Monospace section/eyebrow label — the instrument-panel voice. */
+  .eyebrow {
+    @apply font-mono text-[0.68rem] uppercase tracking-label text-muted;
+  }
+
+  /* A spec-sheet panel: square corners, hairline frame, white field. */
+  .panel {
+    @apply bg-surface border border-line;
+  }
+
+  /* SIGNATURE: the deviation/tolerance band. A clause measured against the
+     market-standard baseline (centre). Left = favourable, right = unfavourable. */
+  .devband {
+    @apply relative h-2 w-full bg-sunken border border-line;
+    background-image: linear-gradient(
+      to right,
+      rgba(30, 122, 102, 0.18) 0%,
+      rgba(30, 122, 102, 0.05) 35%,
+      transparent 50%,
+      rgba(178, 51, 34, 0.06) 65%,
+      rgba(178, 51, 34, 0.2) 100%
+    );
+  }
+  .devband-baseline {
+    @apply absolute top-[-3px] bottom-[-3px] left-1/2 w-px -translate-x-1/2 bg-ink/40;
+  }
+  .devband-marker {
+    @apply absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rotate-45 border border-white;
+  }
+}
+
+@layer utilities {
+  /* A processed chunk card rises into view from below and settles. */
+  @keyframes chunk-rise {
+    from {
+      transform: translateY(40px);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+  .chunk-rise {
+    animation: chunk-rise 0.5s cubic-bezier(0.16, 0.84, 0.3, 1) both;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

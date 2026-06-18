@@ -3,7 +3,8 @@ from fastapi import APIRouter, UploadFile, File, BackgroundTasks, Depends, HTTPE
 from sqlmodel import Session, select
 from app.db.engine import get_session
 from app.db.models import Contract
-from app.pipeline.runner import run_pipeline
+from app.pipeline.runner import run_financial_analysis
+from app.pipeline.progress import set_progress, get_progress, clear_progress
 from app.config import settings
 
 
@@ -34,12 +35,18 @@ def _run_analysis(contract_id: int):
     with Session(_engine) as session:
         c = session.get(Contract, contract_id)
         c.status = "processing"; session.add(c); session.commit()
+
+        def on_progress(**fields):
+            set_progress(contract_id, **fields)
+
         try:
-            result = run_pipeline(c.file_path, get_llm())
+            result = run_financial_analysis(c.file_path, get_llm(), on_progress=on_progress)
             c.analysis = result.model_dump()
             c.status = "done"
         except Exception as e:  # noqa: BLE001
             c.status = "failed"; c.error = str(e)
+        finally:
+            clear_progress(contract_id)
         session.add(c); session.commit()
 
 
@@ -59,11 +66,27 @@ def get_contract(contract_id: int, session: Session = Depends(get_session)):
     if not c:
         raise HTTPException(404, "contract not found")
     return {"id": c.id, "filename": c.filename, "status": c.status,
-            "error": c.error, "analysis": c.analysis}
+            "error": c.error, "analysis": c.analysis,
+            "progress": get_progress(contract_id)}
 
 
 @router.get("")
 def list_contracts(session: Session = Depends(get_session)):
     rows = session.exec(select(Contract)).all()
-    return [{"id": c.id, "filename": c.filename, "status": c.status,
-             "overall_risk_score": (c.analysis or {}).get("overall_risk_score")} for c in rows]
+    out = []
+    for c in rows:
+        ident = (c.analysis or {}).get("identity") or {}
+        out.append({"id": c.id, "filename": c.filename, "status": c.status,
+                    "company": ident.get("company"), "period": ident.get("period"),
+                    "doc_type": ident.get("doc_type")})
+    return out
+
+
+@router.delete("/{contract_id}")
+def delete_contract(contract_id: int, session: Session = Depends(get_session)):
+    c = session.get(Contract, contract_id)
+    if not c:
+        raise HTTPException(404, "document not found")
+    session.delete(c); session.commit()
+    clear_progress(contract_id)
+    return {"id": contract_id, "deleted": True}
