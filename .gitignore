@@ -9,3 +9,4 @@ uploads/
 dist/
 .DS_Store
 fixtures/generated/
+.claude/
