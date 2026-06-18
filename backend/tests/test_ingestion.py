@@ -41,3 +41,28 @@ def test_pdf_parser_extracts_text(tmp_path):
     out = PdfParser().parse(str(p))
     assert "Governing Law" in out.full_text
     assert out.had_text_layer is True
+
+
+from app.ingestion.docling_parser import DoclingParser
+
+
+class _FakeDoc:
+    def export_to_markdown(self):
+        return "1. Indemnity\nThe Supplier shall indemnify the Customer."
+
+
+class _FakeResult:
+    document = _FakeDoc()
+
+
+class _FakeConverter:
+    def convert(self, path):
+        return _FakeResult()
+
+
+def test_docling_parser_uses_converter(tmp_path):
+    p = tmp_path / "scan.pdf"
+    p.write_bytes(b"%PDF-1.4")
+    out = DoclingParser(converter=_FakeConverter()).parse(str(p))
+    assert "Indemnity" in out.full_text
+    assert out.had_text_layer is True
